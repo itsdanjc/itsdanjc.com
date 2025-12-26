@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from marko import Markdown, MarkoExtension
 from marko.block import Document, Heading
-from jinja2 import Environment
+from jinja2 import Environment, FileSystemLoader
 from typing import Iterable, Final, Any
 from .templates import DEFAULT_PAGE_TEMPLATE, BLANK_PAGE_DEFAULT
 
@@ -38,12 +38,16 @@ class Page(Markdown):
             self,
             path: Path,
             jinja_env: Environment,
-            extensions: Iterable[str | MarkoExtension] | None = DEFAULT_EXTENSIONS,
+            extensions: Iterable[str | MarkoExtension] | None = None,
     ):
         """
         Initialize a page from a Markdown document.
 
-        This sets up the Markdown parser with the requested extensions and
+        **Note:** In most cases, you would not need to access this class directly,
+        instead use `sitegen.build()` which handles most of what this class
+        does in a single call.
+
+        This class sets up the Markdown parser with the requested extensions and
         associates the page with its source file and rendering environment.
         The document contents are not rendered until explicitly requested.
 
@@ -51,6 +55,8 @@ class Page(Markdown):
         :param jinja_env: Jinja2 environment used for rendering templates.
         :param extensions: Optional iterable of Marko extension names or
             extension instances to enable for Markdown parsing.
+
+        *See Also:* ``sitegen.build()``
         """
         super().__init__(extensions=extensions)
         self.jinja_env = jinja_env
@@ -132,6 +138,35 @@ class BuildContext:
 
     def __init__(self, cwd: Path, source: Path, dest: Path):
         self.curr_working_dir = cwd
-        self.source_path = cwd.joinpath("__public", source)
+        self.source_path = cwd.joinpath("_public", source)
         self.dest_path = cwd.joinpath(dest)
         self.template_path = cwd.joinpath("_fragments")
+
+
+def build(
+        build_context: BuildContext,
+        extensions: Iterable[str | MarkoExtension] | None = None,
+        **jinja_context: Any
+) -> None:
+    """
+    Build a page from a Markdown document.
+
+    If no extensions are provided, the default extension list will be used.
+
+    :param build_context: BuildContext instance.
+    :param extensions: Optional iterable of Marko extension names or
+            extension instances to enable for Markdown parsing.
+    :param jinja_context: Additional context when rendering.
+    :return: None
+    """
+    jinja_env = Environment(
+        autoescape=True,
+        loader=FileSystemLoader(build_context.template_path),
+    )
+
+    if not extensions:
+        extensions = DEFAULT_EXTENSIONS
+
+    page = Page(build_context.source_path, jinja_env, extensions)
+    page.read_parse()
+    page.render_write(build_context.dest_path, **jinja_context)
