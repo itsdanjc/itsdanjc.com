@@ -94,7 +94,10 @@ class Page(Markdown):
             ) from e
 
         if len(self.body.children) == 0:
-            logger.warning("%s has empty body, falling back to default.", self.document_path.name)
+            logger.warning(
+                "%s has empty body and should probably be set to draft.",
+                self.document_path.name
+            )
             default_body: str = BLANK_PAGE_DEFAULT.format(
                 heading=self.document_path.stem.title(),
                 body=default,

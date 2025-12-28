@@ -10,6 +10,9 @@ class BuildStats:
     time_seconds: float = 0.0
 
     def summary(self, total_pages: int) -> str:
+        if total_pages == 0:
+            return "Nothing to do."
+
         status = (
             "Build finished with errors."
             if self.errors
@@ -17,8 +20,7 @@ class BuildStats:
         )
         lines = [
             status,
-            "",
-            f"Processed {total_pages} pages in {self.time_seconds:.2f}s:",
+            f"Processed {total_pages} pages in {self.time_seconds:.2f}s.",
         ]
         stats = [
             ("Created", self.created),

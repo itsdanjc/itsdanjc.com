@@ -1,7 +1,7 @@
 import logging, os
 from pathlib import Path
 from typing import Final, List
-from .context import BuildContext
+from .context import BuildContext, FileType
 
 logger = logging.getLogger(__name__)
 
@@ -38,4 +38,6 @@ class SiteRoot:
                     dest=dest
                 )
 
+                if not context.type in {FileType.HTML, FileType.MARKDOWN}:
+                    continue
                 self.tree.append(context)
