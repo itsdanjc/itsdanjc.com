@@ -9,7 +9,7 @@ DEFAULT_PAGE_TEMPLATE: Final[Template] = Template(
     <body>
     <h1>{{page.get_title()|safe}}</h1>
     <p>Last Modified: 
-    {{page.last_modified.strftime(\"%d %b %y\")}}
+    {{page.context.source_path_lastmod.strftime(\"%d %b %y\")}}
     </p>
     {{page.to_html()|safe}}
     </body>

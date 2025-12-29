@@ -1,21 +1,18 @@
 import logging
+from io import TextIOWrapper
+from charset_normalizer import from_path
 from pathlib import Path
-from datetime import datetime, timezone
 from marko import Markdown, MarkoExtension
 from marko.block import Document, Heading
 from jinja2 import Environment, FileSystemLoader, Template
 from jinja2.exceptions import TemplateSyntaxError
-from typing import Iterable, Final, Any
+from typing import Iterable, Final, Any, override
+from .exec import FileTypeError
 from .templates import (
     DEFAULT_PAGE_TEMPLATE,
     BLANK_PAGE_DEFAULT
 )
 from .context import BuildContext, FileType
-from .exec import (
-    MarkdownParseException,
-    MarkdownRenderException,
-    MarkdownTemplateException
-)
 
 logger = logging.getLogger(__name__)
 DEFAULT_EXTENSIONS: Final[frozenset[str]] = frozenset(
@@ -33,22 +30,20 @@ class Page(Markdown):
 
     :ivar title: Parsed top-level heading used as the page title.
     :ivar body: Parsed Markdown document body.
-    :ivar document_path: Path to the source document.
+    :ivar context: Path to the source document.
     :ivar metadata: Page metadata defined at the top of each file.
-    :ivar last_modified: Timestamp of the last modification of the source file.
     :ivar jinja_env: Jinja2 environment used for template rendering.
     """
 
     title: Heading
     body: Document
-    document_path: Path
+    context: BuildContext
     metadata: dict[str, Any]
-    last_modified: datetime
     jinja_env: Environment
 
     def __init__(
             self,
-            path: Path,
+            context: BuildContext,
             jinja_env: Environment,
             extensions: Iterable[str | MarkoExtension] | None = None,
     ):
@@ -63,7 +58,7 @@ class Page(Markdown):
         associates the page with its source file and rendering environment.
         The document contents are not rendered until explicitly requested.
 
-        :param path: Path to the source Markdown file.
+        :param context: Path to the source Markdown file.
         :param jinja_env: Jinja2 environment used for rendering templates.
         :param extensions: Optional iterable of Marko extension names or
             extension instances to enable for Markdown parsing.
@@ -72,47 +67,57 @@ class Page(Markdown):
         """
         super().__init__(extensions=extensions)
         self.jinja_env = jinja_env
-        self.document_path = path
+        self.context = context
 
-    def read_parse(self, default: str | None = None) -> None:
+    def r_open(self) -> TextIOWrapper:
         """
-        Read and parse the file represented by this object from disk.
+        Prepare source file for reading.
+        :return: File object as the built-in `open()` function does.
+        :raise FileTypeError: Tried to open a non markdown file.
+        :raise IOError: If source file cannot be opened for any reason.
+        """
+        path = self.context.source_path
+        if not (path.suffix.lower() in FileType.MARKDOWN.value):
+            raise FileTypeError("File not a markdown file.", path.suffix)
 
-        Uses source path `self.document_path`.
+        try:
+            charset = from_path(path).best()
+            encoding = (charset.encoding if charset else "utf-8")
+            return path.open("r", errors="ignore", encoding=encoding)
 
+        except OSError as e:
+            raise IOError(*e.args) from e
+
+    def read(self) -> tuple[str, str]:
+        """
+        Return the contents of the file as strings.
+        :raise FileTypeError: Tried to open a non markdown file.
+        :raise IOError: If source file cannot be opened for any reason.
+        :return: A tuple containing the yml header and the body.
+        """
+        body: str
+        with self.r_open() as f:
+            body = f.read()
+
+        self.metadata = dict() # TODO: Parse yml at start of file.
+        return "", body
+
+    @override
+    def parse(self, default: str | None = None) -> None:
+        """
+        Parse the body of this page.
         If the body of the source file is empty, will fallback to default content.
         :return: None
         """
-        try:
-            with self.document_path.open("r", errors='replace') as f:
-                doc_body: str = f.read()
-                self.metadata = dict()  #TODO: Parse yml at start of file.
-                self.body = self.parse(doc_body)
-        except FileNotFoundError as e:
-            raise MarkdownParseException(
-                "Unable to open %s.", self.document_path,
-            ) from e
+        yml, body = self.read()
+        self.body = super().parse(body)
 
         if len(self.body.children) == 0:
+            self.body = super().parse(default)
             logger.warning(
                 "%s has empty body and should probably be set to draft.",
-                self.document_path.name
+                self.context.source_path.name
             )
-            default_body: str = BLANK_PAGE_DEFAULT.format(
-                heading=self.document_path.stem.title(),
-                body=default,
-            )
-            self.body: Document = self.parse(default_body)
-
-        self.last_modified = datetime.fromtimestamp(
-            self.document_path.stat().st_mtime,
-            tz=timezone.utc,
-        )
-
-        first_child = self.body.children[0]
-        if isinstance(first_child, Heading):
-            self.title = first_child
-            self.body.children = self.body.children[1:]
 
     def render_write(self, dest: Path, **jinja_context) -> None:
         """
@@ -142,18 +147,18 @@ class Page(Markdown):
 
 
         except TemplateSyntaxError as e:
-            raise MarkdownTemplateException(
+            raise OSError(
                 "%s in template %s line %d", e.message, e.lineno, e.name
             ) from e
 
         except Exception as e:
-            raise MarkdownRenderException(
+            raise OSError(
                 "".join(e.args)
             ) from e
 
         logger.debug(
             "Successfully built %s using template %s.",
-            self.document_path.name,
+            self.context.source_path.name,
             template.name
         )
 
@@ -196,8 +201,8 @@ def build(
         return
 
     logger.info("Building page %s.", build_context.source_path.name)
-    page = Page(build_context.source_path, jinja_env, extensions)
-    page.read_parse()
+    page = Page(build_context, jinja_env, extensions)
+    page.parse(BLANK_PAGE_DEFAULT)
 
     if page.metadata.get("is_draft", False):
         logger.info("Page %s is draft. Skipping...", build_context.source_path)
