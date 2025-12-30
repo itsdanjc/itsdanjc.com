@@ -1,17 +1,29 @@
 import logging
-from dataclasses import dataclass
-from pathlib import Path
-from datetime import datetime, timezone
+import re
+from io import TextIOWrapper
+from charset_normalizer import from_path
 from marko import Markdown, MarkoExtension
 from marko.block import Document, Heading
-from jinja2 import Environment, FileSystemLoader
-from typing import Iterable, Final, Any
-from .templates import DEFAULT_PAGE_TEMPLATE, BLANK_PAGE_DEFAULT
+from jinja2 import Environment, FileSystemLoader, Template
+from typing import Iterable, Final, Any, override
+from markupsafe import Markup
+from .exec import FileTypeError
+from .context import BuildContext, TemplateContext, FileType
 
 logger = logging.getLogger(__name__)
+BLANK_PAGE_DEFAULT: Final[str] = "# {heading}\n{body}"
 DEFAULT_EXTENSIONS: Final[frozenset[str]] = frozenset(
     {'footnote', 'toc', 'codehilite', 'gfm'}
 )
+DEFAULT_PAGE_TEMPLATE: Final[Template] = Template(
+    "<html><head><title>{{page.title|striptags}}</title>"
+    "</head><body><h1>{{page.title}}</h1>"
+    "<div style=\"float:right\">{{page.table_of_contents}}</div>"
+    "<p>Last Modified: {{page.modified.strftime(\"%d %b %y\")}}"
+    "</p>{{page.html}}</body></html>"
+)
+DEFAULT_PAGE_TEMPLATE.name = "default"
+
 
 class Page(Markdown):
     """
@@ -23,22 +35,21 @@ class Page(Markdown):
 
     :ivar title: Parsed top-level heading used as the page title.
     :ivar body: Parsed Markdown document body.
-    :ivar document_path: Path to the source document.
+    :ivar context: Path to the source document.
     :ivar metadata: Page metadata defined at the top of each file.
-    :ivar last_modified: Timestamp of the last modification of the source file.
     :ivar jinja_env: Jinja2 environment used for template rendering.
     """
 
     title: Heading
     body: Document
-    document_path: Path
+    template: Template
+    context: BuildContext
     metadata: dict[str, Any]
-    last_modified: datetime
     jinja_env: Environment
 
     def __init__(
             self,
-            path: Path,
+            context: BuildContext,
             jinja_env: Environment,
             extensions: Iterable[str | MarkoExtension] | None = None,
     ):
@@ -53,7 +64,7 @@ class Page(Markdown):
         associates the page with its source file and rendering environment.
         The document contents are not rendered until explicitly requested.
 
-        :param path: Path to the source Markdown file.
+        :param context: Path to the source Markdown file.
         :param jinja_env: Jinja2 environment used for rendering templates.
         :param extensions: Optional iterable of Marko extension names or
             extension instances to enable for Markdown parsing.
@@ -62,41 +73,94 @@ class Page(Markdown):
         """
         super().__init__(extensions=extensions)
         self.jinja_env = jinja_env
-        self.document_path = path
+        self.context = context
 
-    def read_parse(self, default: str | None = None) -> None:
+    def r_open(self) -> TextIOWrapper:
         """
-        Read and parse the file represented by this object from disk.
+        Prepare source file for reading.
+        :return: File object as the built-in `open()` function does.
+        :raise FileTypeError: Tried to open a non markdown file.
+        :raise IOError: If source file cannot be opened for any reason.
+        """
+        path = self.context.source_path
+        if not (path.suffix.lower() in FileType.MARKDOWN.value):
+            raise FileTypeError("File not a markdown file.", path.suffix)
 
-        Uses source path `self.document_path`.
+        try:
+            charset = from_path(path).best()
+            encoding = (charset.encoding if charset else "utf-8")
+            return path.open("r", errors="ignore", encoding=encoding)
 
+        except OSError as e:
+            raise IOError(*e.args) from e
+
+    def w_open(self) -> TextIOWrapper:
+        """
+        Prepare destination file for writing.
+        :return: File object as the built-in `open()` function does.
+        :raise IOError: If source file cannot be opened for any reason.
+        """
+        path = self.context.dest_path
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            return path.open("w", errors="ignore", encoding="utf-8")
+
+        except OSError as e:
+            raise IOError(*e.args) from e
+
+    def read(self) -> tuple[str, str]:
+        """
+        Return the contents of the file as strings.
+        :raise FileTypeError: Tried to open a non markdown file.
+        :raise IOError: If source file cannot be opened for any reason.
+        :return: A tuple containing the yml header and the body.
+        """
+        body: str
+        with self.r_open() as f:
+            body = f.read()
+
+        self.metadata = dict() # TODO: Parse yml at start of file.
+        return "", body
+
+    def set_template(self, *templates: str | Template) -> None:
+        self.template = self.jinja_env.get_or_select_template(
+            [*templates, DEFAULT_PAGE_TEMPLATE]
+        )
+
+    def set_title(self) -> Heading:
+        # Set a default before attempting to get actual title
+        title = Heading(
+            re.match(Heading.pattern, "# Heading")
+        )
+
+        for e in self.body.children:
+            if isinstance(e, Heading) and e.level == 1:
+                self.body.children.remove(e) #type: ignore
+                return e
+        return title
+
+    @override
+    def parse(self, default: str | None = None) -> None:
+        """
+        Parse the body of this page.
         If the body of the source file is empty, will fallback to default content.
         :return: None
         """
-        with self.document_path.open("r", errors='replace') as f:
-            doc_body: str = f.read()
-            self.metadata = dict()
-            self.body = self.parse(doc_body)
+        yml, body = self.read()
+        self.body = super().parse(body)
 
         if len(self.body.children) == 0:
-            logger.debug("%s has empty body, falling back to default.", self.document_path.name)
-            default_body: str = BLANK_PAGE_DEFAULT.format(
-                heading=self.document_path.stem.title(),
-                body=default,
+            self.body = super().parse(default)
+            logger.warning(
+                "%s has empty body and should probably be set to draft.",
+                self.context.source_path.name
             )
-            self.body: Document = self.parse(default_body)
 
-        self.last_modified = datetime.fromtimestamp(
-            self.document_path.stat().st_mtime,
-            tz=timezone.utc,
-        )
+        self.title = self.set_title()
 
-        first_child = self.body.children[0]
-        if isinstance(first_child, Heading):
-            self.title = first_child
-            self.body.children = self.body.children[1:]
-
-    def render_write(self, dest: Path, **jinja_context) -> None:
+    @override
+    def render(self, *templates: str | Template, **jinja_context) -> None:
         """
         Render this page object to HTML and write it to disk.
 
@@ -104,53 +168,33 @@ class Page(Markdown):
         will fallback to use `DEFAULT_PAGE_TEMPLATE`. Renders the page
         using the current object as context.
 
-        :param dest: Destination file path.
+        :param templates:
         :param jinja_context: Additional context when rendering.
         :return: None
+
+        :raises MarkdownRenderException: if rendering fails.
+        :raises MarkdownTemplateException: if rendering fails, specifically with a template.
         """
-        template = self.jinja_env.get_or_select_template(
-            ["page.html", DEFAULT_PAGE_TEMPLATE]
+        self.set_template(*templates, "page.html")
+        rendered_body = Markup(
+            super().render(self.body)
+        )
+        rendered_toc = Markup(
+            self.renderer.render_toc()
+        )
+        rendered_title = Markup(
+            self.renderer.render_children(self.title)
         )
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with dest.open("w", encoding="utf-8") as f:
-            render_result: str = template.render(page=self, **jinja_context)
-            f.write(render_result)
-            logger.debug(
-                "Successfully built %s -> %s.",
-                self.document_path,
-                dest
+        with self.w_open() as f:
+            t_c = TemplateContext(
+                html=rendered_body,
+                table_of_contents=rendered_toc,
+                title=rendered_title,
+                modified=self.context.source_path_lastmod
             )
-
-
-    #Methods dest be used in jinja templates
-    def to_html(self):
-        return self.render(self.body)
-
-    def get_title(self):
-        return self.renderer.render_children(self.title)
-
-@dataclass
-class BuildContext:
-    """
-    Initialize a build context from relative paths.
-
-    :ivar curr_working_dir: Current working directory used as the base for all paths.
-    :ivar source_path: Path to the source content directory relative to webroot.
-    :ivar dest_path: Path to the output destination directory relative to webroot.
-    :ivar template_path: Path to the template directory relative to webroot.
-    """
-    curr_working_dir: Final[Path]
-    source_path: Final[Path]
-    dest_path: Final[Path]
-    template_path = Final[Path]
-
-    def __init__(self, cwd: Path, source: Path, dest: Path):
-        self.curr_working_dir = cwd
-        self.source_path = cwd.joinpath("_public", source)
-        self.dest_path = cwd.joinpath(dest)
-        self.template_path = cwd.joinpath("_fragments")
-
+            html = self.template.render(page=t_c, **jinja_context)
+            f.write(html)
 
 def build(
         build_context: BuildContext,
@@ -168,29 +212,26 @@ def build(
     :param jinja_context: Additional context when rendering.
     :return: None
     """
-    jinja_env = Environment(
-        autoescape=True,
-        loader=FileSystemLoader(build_context.template_path),
-    )
+    jinja_loader = FileSystemLoader(build_context.template_path)
+    jinja_env = Environment(autoescape=True, loader=jinja_loader)
 
     if not extensions:
         extensions = DEFAULT_EXTENSIONS
 
-    logger.info("Building page %s.", build_context.source_path.name)
-    page = Page(build_context.source_path, jinja_env, extensions)
-
-    try:
-        page.read_parse()
-    except FileNotFoundError as ex:
-        logger.error("Unable to open %s for reading.", build_context.source_path)
+    if build_context.type != FileType.MARKDOWN:
+        logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
         return
+
+    page = Page(build_context, jinja_env, extensions)
+    page.parse(BLANK_PAGE_DEFAULT)
 
     if page.metadata.get("is_draft", False):
         logger.info("Page %s is draft. Skipping...", build_context.source_path)
         return
 
-    try:
-        page.render_write(build_context.dest_path, **jinja_context)
-    except OSError as ex:
-        logger.error("Failed to write dest %s", build_context.dest_path)
-        logger.debug(ex)
+    page.render(**jinja_context)
+    logger.debug(
+        "Successfully built %s using template %s.",
+        build_context.source_path.name,
+        page.template.name
+    )

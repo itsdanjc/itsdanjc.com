@@ -1,9 +1,10 @@
 import logging, os
 from pathlib import Path
 from typing import Final, List
-from . import BuildContext
+from .context import BuildContext, FileType
 
 logger = logging.getLogger(__name__)
+
 
 class SiteRoot:
     """
@@ -27,7 +28,6 @@ class SiteRoot:
             for file in files:
                 file_path = sub_dir.joinpath(file)
                 file_path = file_path.relative_to(md_dir)
-                logger.debug("Found page %s", file_path)
                 dest = file_path.parent.joinpath(
                     file_path.stem + ".html",
                 )
@@ -37,4 +37,8 @@ class SiteRoot:
                     dest=dest
                 )
 
+                if not context.type in {FileType.HTML, FileType.MARKDOWN}:
+                    continue
+
+                logger.debug("Found %s", file_path)
                 self.tree.append(context)
