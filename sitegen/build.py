@@ -222,7 +222,6 @@ def build(
         logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
         return
 
-    logger.info("Building page %s.", build_context.source_path.name)
     page = Page(build_context, jinja_env, extensions)
     page.parse(BLANK_PAGE_DEFAULT)
 

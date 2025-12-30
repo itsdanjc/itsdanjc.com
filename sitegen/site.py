@@ -28,7 +28,6 @@ class SiteRoot:
             for file in files:
                 file_path = sub_dir.joinpath(file)
                 file_path = file_path.relative_to(md_dir)
-                logger.debug("Found page %s", file_path)
                 dest = file_path.parent.joinpath(
                     file_path.stem + ".html",
                 )
@@ -40,4 +39,6 @@ class SiteRoot:
 
                 if not context.type in {FileType.HTML, FileType.MARKDOWN}:
                     continue
+
+                logger.debug("Found %s", file_path)
                 self.tree.append(context)

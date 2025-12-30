@@ -1,10 +1,9 @@
-from typing import Optional
-
 
 class BuildException(Exception):
     def __init__(self, message: str, *args):
         self.message = message
         super().__init__(args)
+
 
 class FileTypeError(OSError):
     """This file type is not supported."""
