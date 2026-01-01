@@ -1,11 +1,12 @@
 import logging
 import re
+from datetime import datetime, timezone
 from io import TextIOWrapper
 from charset_normalizer import from_path
 from marko import Markdown, MarkoExtension
 from marko.block import Document, Heading
 from jinja2 import Environment, FileSystemLoader, Template
-from typing import Iterable, Final, Any, override
+from typing import Iterable, Final, Any
 from markupsafe import Markup
 from .exec import FileTypeError
 from .context import BuildContext, TemplateContext, FileType
@@ -140,7 +141,6 @@ class Page(Markdown):
                 return e
         return title
 
-    @override
     def parse(self, default: str | None = None) -> None:
         """
         Parse the body of this page.
@@ -159,7 +159,6 @@ class Page(Markdown):
 
         self.title = self.set_title()
 
-    @override
     def render(self, *templates: str | Template, **jinja_context) -> None:
         """
         Render this page object to HTML and write it to disk.
@@ -191,7 +190,8 @@ class Page(Markdown):
                 html=rendered_body,
                 table_of_contents=rendered_toc,
                 title=rendered_title,
-                modified=self.context.source_path_lastmod
+                modified=self.context.source_path_lastmod,
+                now=datetime.now(timezone.utc)
             )
             html = self.template.render(page=t_c, **jinja_context)
             f.write(html)

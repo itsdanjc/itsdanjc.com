@@ -24,9 +24,10 @@ class TemplateContext:
     table_of_contents: Markup
     title: Markup
     modified: datetime
+    now: datetime
 
     def __html__(self) -> Markup:
-        return self.html
+        return self.html.__html__()
 
 
 class BuildContext:
