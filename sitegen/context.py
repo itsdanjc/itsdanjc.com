@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import IntEnum, Enum
 from pathlib import Path
-from typing import Final, Optional
+from typing import Final, Optional, Any, Mapping
 from markupsafe import Markup
 
 class BuildReason(IntEnum):
@@ -24,10 +24,8 @@ class TemplateContext:
     table_of_contents: Markup
     title: Markup
     modified: datetime
+    yml: Mapping[Any, Any]
     now: datetime
-
-    def __html__(self) -> Markup:
-        return self.html.__html__()
 
 
 class BuildContext:
