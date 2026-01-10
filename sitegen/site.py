@@ -1,7 +1,7 @@
-import logging, os
+import logging
 from pathlib import Path
 from typing import Final, Generator, Set
-from .context import BuildContext, FileType
+from .context import BuildContext, FileType, SOURCE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,8 @@ class SiteRoot:
         """
         self.root_path = path
 
-    def tree_iter(self, follow_links: bool = False) -> Generator[BuildContext, None, int]:
-        md_dir = self.root_path.joinpath("_public")
+    def tree_iter(self, follow_links: bool = False) -> Generator[BuildContext, None, None]:
+        md_dir = self.root_path.joinpath(SOURCE_DIR)
 
         for file in md_dir.glob("**", recurse_symlinks=follow_links):
             if not (file.is_file() and file.suffix.lower() in self.valid_ext):

@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Final, Optional, Any, Mapping
 from markupsafe import Markup
 
+SOURCE_DIR: Final[Path] = Path("source")
+DEST_DIR: Final[Path] = Path("build")
+TEMPLATE_DIR: Final[Path] = Path("templates")
+
+
 class BuildReason(IntEnum):
     CREATED = 0
     CHANGED = 1
@@ -48,9 +53,9 @@ class BuildContext:
 
     def __init__(self, cwd: Path, source: Path, dest: Path):
         self.curr_working_dir = cwd
-        self.source_path = cwd.joinpath("_public", source)
-        self.dest_path = cwd.joinpath(dest)
-        self.template_path = cwd.joinpath("_fragments")
+        self.source_path = cwd.joinpath(SOURCE_DIR, source)
+        self.dest_path = cwd.joinpath(DEST_DIR, dest)
+        self.template_path = cwd.joinpath(TEMPLATE_DIR)
 
         self.source_path_lastmod = datetime.fromtimestamp(
             self.source_path.stat().st_mtime,

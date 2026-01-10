@@ -1,4 +1,3 @@
-import os
 import argparse
 import logging
 import sys
@@ -9,13 +8,13 @@ from .log import configure_logging
 from .site import SiteRoot
 from .build import build as build_page
 from .cli import  BuildStats
-from . import __version__, __author__, BuildReason
+from . import __version__, __author__
 
 CLI_HEADER_MSG: Final[str] = f"sitegen {__version__}, by {__author__}"
 CLI_DESC: Final[str] = "Epilogue"
 
 logger = logging.getLogger(__name__)
-cwd = Path(os.getcwd())
+cwd = Path.cwd()
 
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(prog="cli", description=CLI_DESC)
@@ -52,6 +51,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
 
 def build(force: bool, directory: Path, perform_clean: bool, dry_run: bool) -> None:
+    directory.resolve()
     logger.info("Building site at %s", directory)
     site = SiteRoot(directory)
 
