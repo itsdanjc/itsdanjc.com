@@ -4,7 +4,7 @@ from .exec import BuildException, FileTypeError
 from .site import SiteRoot
 
 __version__ = "0.1.0"
-__author__ = "itsdanjc"
+__author__ = "itsdanjc <dan@itsdanjc.com>"
 __all__ = [
     "Page",
     "SiteRoot",

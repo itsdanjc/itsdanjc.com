@@ -170,31 +170,31 @@ class Page(Markdown):
         :param templates:
         :param jinja_context: Additional context when rendering.
         :return: None
-
-        :raises MarkdownRenderException: if rendering fails.
-        :raises MarkdownTemplateException: if rendering fails, specifically with a template.
         """
         self.set_template(*templates, "page.html")
-        rendered_body = Markup(
-            super().render(self.body)
-        )
-        rendered_toc = Markup(
-            self.renderer.render_toc()
-        )
-        rendered_title = Markup(
-            self.renderer.render_children(self.title)
+
+        template_context = TemplateContext(
+            html = Markup(
+                super().render(self.body)
+            ),
+            table_of_contents = Markup(
+                self.renderer.render_toc()
+            ),
+            title = Markup(
+                self.renderer.render_children(self.title)
+            ),
+            modified = self.context.source_path_lastmod,
+            yml = self.metadata,
+            now = datetime.now(timezone.utc)
         )
 
         with self.w_open() as f:
-            t_c = TemplateContext(
-                html=rendered_body,
-                table_of_contents=rendered_toc,
-                title=rendered_title,
-                modified=self.context.source_path_lastmod,
-                now=datetime.now(timezone.utc)
+            html = self.template.render(
+                page=template_context, **jinja_context
             )
-            html = self.template.render(page=t_c, **jinja_context)
-            f.write(html)
+
+            if not self.context.validate_only:
+                f.write(html)
 
 def build(
         build_context: BuildContext,
@@ -219,6 +219,7 @@ def build(
         extensions = DEFAULT_EXTENSIONS
 
     if build_context.type != FileType.MARKDOWN:
+        print(build_context.type)
         logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
         return
 
@@ -230,8 +231,3 @@ def build(
         return
 
     page.render(**jinja_context)
-    logger.debug(
-        "Successfully built %s using template %s.",
-        build_context.source_path.name,
-        page.template.name
-    )
