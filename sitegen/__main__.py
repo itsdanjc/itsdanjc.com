@@ -45,7 +45,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     try:
         match args.commands:
             case "build":
-                build(args.force, args.working_dir, args.clean, args.dry_run)
+                build(args.force, args.site_root, args.clean, args.dry_run)
             case _:
                 parser.print_help()
     except KeyboardInterrupt:
