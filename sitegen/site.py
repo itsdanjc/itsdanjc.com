@@ -12,13 +12,10 @@ class SiteRoot:
     """
     root_path: Final[Path]
     tree: Set[BuildContext]
-    valid_ext: Final[frozenset[str]] = frozenset(
-        FileType.HTML.value | FileType.MARKDOWN.value
-    )
+    valid_ext: Final[frozenset[str]] = FileType.all()
 
     def __init__(self, path: Path):
         """
-
         :param path: Path to the root of the site.
         """
         self.root_path = path

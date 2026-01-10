@@ -217,6 +217,7 @@ def build(
         extensions = DEFAULT_EXTENSIONS
 
     if build_context.type != FileType.MARKDOWN:
+        print(build_context.type)
         logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
         return
 
