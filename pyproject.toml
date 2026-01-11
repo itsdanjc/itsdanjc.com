@@ -1,0 +1,20 @@
+[project]
+name = "sitegen"
+version = "0.1.2"
+readme = "README.md"
+license = "GPL-3.0"
+authors = [
+    {name = "itsdanjc", email = "dan@itsdanjc.com"},
+]
+dependencies = [
+    "charset-normalizer",
+    "Jinja2",
+    "marko",
+    "MarkupSafe",
+    "Pygments",
+    "python-slugify",
+    "text-unidecode"
+]
+
+[project.scripts]
+sitegen = "sitegen.__main__:main"

@@ -27,10 +27,10 @@ class SiteRoot:
         self.dest_dir = path.joinpath(DEST_DIR)
         self.template_dir = path.joinpath(TEMPLATE_DIR)
 
-    def tree_iter(self, follow_links: bool = False) -> Generator[BuildContext, None, None]:
+    def tree_iter(self) -> Generator[BuildContext, None, None]:
         md_dir = self.root_path.joinpath(SOURCE_DIR)
 
-        for file in md_dir.glob("**", recurse_symlinks=follow_links):
+        for file in md_dir.glob("**"):
             if not (file.is_file() and file.suffix.lower() in self.valid_ext):
                 continue
 
