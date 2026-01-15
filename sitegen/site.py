@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 SOURCE_DIR: Final[Path] = Path("source")
 DEST_DIR: Final[Path] = Path("build")
 TEMPLATE_DIR: Final[Path] = Path("templates")
+URL_BASE: Final[str] = "/"
+URL_INDEX: Final[str] = "index.html"
 
 
 class SiteRoot:
@@ -20,6 +22,8 @@ class SiteRoot:
     source_dir: Final[Path]
     dest_dir: Final[Path]
     template_dir: Final[Path]
+    url_base: Final[str] = URL_BASE
+    url_index: Final[str] = URL_INDEX
 
     def __init__(self, path: Path):
         self.root_path = path

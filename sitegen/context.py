@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from enum import IntEnum, Enum
 from pathlib import Path
 from typing import Final, Optional, Any, Mapping, Self
+from urllib.parse import urljoin, quote
 from markupsafe import Markup
 
 
@@ -55,20 +56,23 @@ class TemplateContext:
     table_of_contents: Markup
     title: Markup
     modified: datetime
+    url: str
     yml: Mapping[Any, Any]
     now: datetime
 
 
 class BuildContext:
     """
-    Initialize a build context from relative paths.
+    Class representing context for use during a page build.
 
-    :ivar source_path: Path to the source content directory relative to webroot.
+    :ivar source_path: Absolute path to the source file.
     :ivar source_path_lastmod: The last modified date of the source file.
-    :ivar dest_path: Path to the output destination directory relative to webroot.
+    :ivar dest_path: Absolute path to the destination file.
     :ivar dest_path_lastmod: The last modified date of the destination file if exists.
-    :ivar template_path: Path to the template directory relative to webroot.
-    :ivar is_dry_run: Do not write build to output file.
+    :ivar template_path: Absolute path to the template directory.
+    :ivar type: FileType representing the file type.
+    :ivar url_path: Absolute URL path of output file.
+    :ivar validate_only: Do not write build to output file.
     """
     source_path: Final[Path]
     source_path_lastmod: Final[datetime]
@@ -76,6 +80,7 @@ class BuildContext:
     dest_path_lastmod: Final[Optional[datetime]]
     template_path: Final[Path]
     type: Final[FileType]
+    url_path: Final[str]
     validate_only: bool
 
     def __init__(self, site: "SiteRoot", source: Path, dest: Path): #type: ignore
@@ -84,6 +89,12 @@ class BuildContext:
         self.template_path = site.template_dir
         self.type = FileType.from_suffix(self.source_path.suffix)
         self.validate_only = False
+
+        url = dest.as_posix()
+        if url.endswith(f"/{site.url_index}") or url == site.url_index:
+            url = url.removesuffix(site.url_index)
+
+        self.url_path = urljoin(site.url_base, quote(url))
 
         self.source_path_lastmod = datetime.fromtimestamp(
             self.source_path.stat().st_mtime,

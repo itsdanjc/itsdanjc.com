@@ -185,6 +185,7 @@ class Page(Markdown):
             ),
             modified = self.context.source_path_lastmod,
             yml = self.metadata,
+            url=self.context.url_path,
             now = datetime.now(timezone.utc)
         )
 

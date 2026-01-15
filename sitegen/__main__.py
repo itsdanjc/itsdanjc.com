@@ -10,14 +10,15 @@ from .build import build as build_page
 from .cli import BuildStats
 from . import __version__, __author__
 
-CLI_HEADER_MSG: Final[str] = f"sitegen {__version__}, by {__author__}"
+CLI_NAME = "sitegen"
+CLI_HEADER_MSG: Final[str] = f"{CLI_NAME} {__version__}, by {__author__}"
 CLI_DESC: Final[str] = "Epilogue"
 
 logger = logging.getLogger(__name__)
 cwd = Path.cwd()
 
 def main(argv: Optional[list[str]] = None) -> None:
-    parser = argparse.ArgumentParser(prog="cli", description=CLI_DESC)
+    parser = argparse.ArgumentParser(prog=CLI_NAME, description=CLI_DESC)
     commands = parser.add_subparsers(title="commands", dest="commands", required=True)
 
     # Global Arguments
