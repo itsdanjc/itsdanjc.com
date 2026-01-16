@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional, Final
 from jinja2 import TemplateError
 from .log import configure_logging
-from .site import SiteRoot
+from .site import SiteRoot, TreeBuilder
 from .build import build as build_page
 from .cli import BuildStats
 from . import __version__, __author__
@@ -56,14 +56,17 @@ def main(argv: Optional[list[str]] = None) -> None:
 
 def build(force: bool, directory: Path, perform_clean: bool, dry_run: bool) -> None:
     site = SiteRoot(directory.resolve())
+    logger.info("Working directory: %s", site.root)
+
+    logger.info("Indexing source directory, may take a while for large sites.")
+    TreeBuilder(site).build()
 
     if perform_clean:
-        logger.info("Performing cleanup before build.")
+        logger.info("Performing cleanup.")
         site.clean_dest()
 
-    logger.info("Building site at %s", directory)
     with BuildStats() as build_stats:
-        for context in site.tree_iter():
+        for context in site.tree:
             name = context.source_path.name
             context.validate_only = dry_run
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Final, List, Optional, Set
+from typing import Final, List, Optional, Union
 from collections.abc import Generator
 from .context import BuildContext, FileType
 
@@ -13,6 +13,7 @@ TEMPLATE_DIR: Final[Path] = Path("templates")
 URL_BASE: Final[str] = "/"
 URL_INDEX: Final[str] = "index.html"
 
+TreeItem: Final[Union] = Union["TreeNode", BuildContext]
 
 class TreeNode:
     path: Final[Path]
@@ -31,7 +32,7 @@ class TreeNode:
         for sub_dir in self.dirs:
             yield from sub_dir
 
-    def __getitem__(self, path: Path) -> TreeNode | BuildContext:
+    def __getitem__(self, path: Path) -> TreeItem:
         for sub_dir in self.yield_dirs():
             if sub_dir.path == path:
                 return sub_dir
@@ -40,7 +41,9 @@ class TreeNode:
             if page.source_path == path:
                 return page
 
-        raise KeyError(f"Directory or file {path.name} not in {self.path} or a subdirectory")
+        raise KeyError(
+            f"Directory or file {path.name} not in {self.path} or a subdirectory"
+        )
 
     def yield_dirs(self) -> Generator[TreeNode, None, None]:
         yield from self.dirs
@@ -51,6 +54,59 @@ class TreeNode:
         yield from self.pages
         for sub_dir in self.dirs:
             yield from sub_dir.yield_pages()
+
+
+class TreeBuilder:
+    site: Final[SiteRoot]
+    node: TreeNode
+    node_path: Path
+    node_dir_list: List[str]
+    node_file_list: List[str]
+    node_not_root: bool
+
+    def __init__(self, site: SiteRoot):
+        self.site = site
+        self.node = site.tree
+
+    def build(self) -> None:
+        for curr_dir, dir_list, file_list in self.site.source_dir.walk():
+            self.node_path = curr_dir
+            self.node_dir_list = dir_list
+            self.node_file_list = file_list
+
+            self.node_not_root = (curr_dir != self.site.tree.path)
+
+            if self.node_not_root:
+                self.node = self.site.tree[curr_dir]
+
+            self.create_directory_nodes()
+            self.create_file_nodes()
+
+    def create_directory_nodes(self):
+        for sub_dir in self.node_dir_list:
+            node_path = Path(self.node_path, sub_dir)
+            self.node.dirs.append(
+                TreeNode(node_path, parent=self.node)
+            )
+
+    def create_file_nodes(self):
+        for file in self.node_file_list:
+            file_path = Path(self.node_path, file).relative_to(
+                self.site.source_dir
+            )
+
+            dest = file_path.with_suffix(".html")
+
+            if not (file_path.suffix.lower() in self.site.valid_ext):
+                continue
+
+            context = BuildContext(
+                site=self.site,
+                source=file_path,
+                dest=dest
+            )
+
+            self.node.pages.append(context)
 
 
 class SiteRoot:
@@ -72,20 +128,6 @@ class SiteRoot:
         self.dest_dir = path.joinpath(DEST_DIR)
         self.template_dir = path.joinpath(TEMPLATE_DIR)
         self.tree = TreeNode(self.source_dir)
-
-    def tree_iter(self) -> Generator[BuildContext, None, None]:
-        for file in self.source_dir.glob("**"):
-            if not (file.is_file() and file.suffix.lower() in self.valid_ext):
-                continue
-
-            file_path = file.relative_to(self.source_dir)
-            dest = file_path.with_suffix(".html")
-
-            yield BuildContext(
-                site=self,
-                source=file_path,
-                dest=dest
-            )
 
     def clean_dest(self) -> List[Path]:
         total_removed = []
