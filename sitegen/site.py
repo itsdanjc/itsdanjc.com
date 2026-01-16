@@ -1,6 +1,8 @@
+from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Final, Generator, Set, List
+from typing import Final, List, Optional
+from collections.abc import Generator
 from .context import BuildContext, FileType
 
 logger = logging.getLogger(__name__)
@@ -12,12 +14,30 @@ URL_BASE: Final[str] = "/"
 URL_INDEX: Final[str] = "index.html"
 
 
+class TreeNode:
+    path: Final[Path]
+    parent: Final[TreeNode | None]
+    pages: List[BuildContext]
+    dirs: List[TreeNode]
+
+    def __init__(self, path: Path, parent: Optional[TreeNode] = None):
+        self.path = path
+        self.parent = parent
+        self.pages = []
+        self.dirs = []
+
+    def __iter__(self) -> Generator[BuildContext, None, None]:
+        yield from self.pages
+        for sub_dir in self.dirs:
+            yield from sub_dir
+
+
 class SiteRoot:
     """
     This class represents the root of the site.
     """
     root_path: Final[Path]
-    tree: Set[BuildContext]
+    tree: TreeNode
     valid_ext: Final[frozenset[str]] = FileType.all()
     source_dir: Final[Path]
     dest_dir: Final[Path]
@@ -27,6 +47,7 @@ class SiteRoot:
 
     def __init__(self, path: Path):
         self.root_path = path
+        self.tree = TreeNode(path)
         self.source_dir = path.joinpath(SOURCE_DIR)
         self.dest_dir = path.joinpath(DEST_DIR)
         self.template_dir = path.joinpath(TEMPLATE_DIR)
@@ -39,9 +60,7 @@ class SiteRoot:
                 continue
 
             file_path = file.relative_to(md_dir)
-            dest = file_path.parent.joinpath(
-                file_path.stem + ".html",
-            )
+            dest = file_path.with_suffix(".html")
 
             yield BuildContext(
                 site=self,
