@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
@@ -5,7 +6,7 @@ from io import TextIOWrapper
 from charset_normalizer import from_path
 from marko import Markdown, MarkoExtension
 from marko.block import Document, Heading
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, Template
 from typing import Iterable, Final, Any
 from markupsafe import Markup
 from .exec import FileTypeError
@@ -47,7 +48,6 @@ class Page(Markdown):
     def __init__(
             self,
             context: BuildContext,
-            jinja_env: Environment,
             extensions: Iterable[str | MarkoExtension] | None = None,
     ):
         """
@@ -62,14 +62,12 @@ class Page(Markdown):
         The document contents are not rendered until explicitly requested.
 
         :param context: Path to the source Markdown file.
-        :param jinja_env: Jinja2 environment used for rendering templates.
         :param extensions: Optional iterable of Marko extension names or
             extension instances to enable for Markdown parsing.
 
         *See Also:* ``sitegen.build()``
         """
         super().__init__(extensions=extensions)
-        self.jinja_env = jinja_env
         self.context = context
 
     def r_open(self) -> TextIOWrapper:
@@ -121,7 +119,7 @@ class Page(Markdown):
         return "", body
 
     def set_template(self, *templates: str | Template) -> None:
-        self.template = self.jinja_env.get_or_select_template(
+        self.template = self.context.jinja_env.get_or_select_template(
             [*templates, PAGE_FALLBACK]
         )
 
@@ -211,9 +209,6 @@ def build(
     :param jinja_context: Additional context when rendering.
     :return: None
     """
-    jinja_loader = FileSystemLoader(build_context.template_path)
-    jinja_env = Environment(autoescape=True, loader=jinja_loader)
-
     if not extensions:
         extensions = DEFAULT_EXTENSIONS
 
@@ -222,7 +217,7 @@ def build(
         logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
         return
 
-    page = Page(build_context, jinja_env, extensions)
+    page = Page(build_context, extensions)
     page.parse(PAGE_DEFAULT_BODY)
 
     if page.metadata.get("is_draft", False):

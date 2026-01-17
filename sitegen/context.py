@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import IntEnum, Enum
 from pathlib import Path
-from typing import Final, Optional, Any, Mapping, Self
+from typing import Final, Optional, Any, Mapping
 from urllib.parse import urljoin, quote
+from jinja2 import Environment
 from markupsafe import Markup
 
 
@@ -79,15 +80,17 @@ class BuildContext:
     dest_path: Final[Path]
     dest_path_lastmod: Final[Optional[datetime]]
     template_path: Final[Path]
+    jinja_env: Final[Environment]
     type: Final[FileType]
     url_path: Final[str]
     validate_only: bool
 
-    def __init__(self, site: "SiteRoot", source: Path, dest: Path): #type: ignore
+    def __init__(self, site: "SiteRoot", source: Path, dest: Path, env: Environment): #type: ignore
         self.source_path = site.source_dir.joinpath(source)
         self.dest_path = site.dest_dir.joinpath(dest)
         self.template_path = site.template_dir
         self.type = FileType.from_suffix(self.source_path.suffix)
+        self.jinja_env = env
         self.validate_only = False
 
         url = dest.as_posix()

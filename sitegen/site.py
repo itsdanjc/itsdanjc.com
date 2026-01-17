@@ -3,8 +3,10 @@ import logging
 from enum import Enum
 from pathlib import Path
 from typing import Final, List, Union, TypeAlias
-from collections.abc import Generator, Callable
+from collections.abc import Generator
+from jinja2 import Environment, FileSystemLoader, Template
 from .context import BuildContext, FileType
+from .templates import RSS_FALLBACK
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +135,8 @@ class TreeBuilder:
             context = BuildContext(
                 site=self.site,
                 source=file_path,
-                dest=dest
+                dest=dest,
+                env=self.site.env
             )
 
             self.node.pages.append(context)
@@ -148,6 +151,7 @@ class SiteRoot:
     source_dir: Final[Path]
     dest_dir: Final[Path]
     template_dir: Final[Path]
+    env: Final[Environment]
     url_base: Final[str] = URL_BASE
     url_index: Final[str] = URL_INDEX
 
@@ -157,6 +161,11 @@ class SiteRoot:
         self.dest_dir = path.joinpath(DEST_DIR)
         self.template_dir = path.joinpath(TEMPLATE_DIR)
         self.tree = TreeNode(self.source_dir)
+        self.env = Environment(
+            autoescape=True,
+            auto_reload=False,
+            loader=FileSystemLoader(self.source_dir)
+        )
 
     def clean_dest(self) -> List[Path]:
         total_removed = []
