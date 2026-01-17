@@ -56,16 +56,16 @@ def main(argv: Optional[list[str]] = None) -> None:
 
 def build(force: bool, directory: Path, perform_clean: bool, dry_run: bool) -> None:
     site = SiteRoot(directory.resolve())
-    logger.info("Working directory: %s", site.root)
-
-    logger.info("Indexing source directory, may take a while for large sites.")
-    TreeBuilder(site).build()
-
-    if perform_clean:
-        logger.info("Performing cleanup.")
-        site.clean_dest()
+    logger.info("Building site at %s", site.root)
 
     with BuildStats() as build_stats:
+        logger.info("Indexing source directory.")
+        TreeBuilder(site)
+
+        if perform_clean:
+            logger.info("Performing cleanup.")
+            site.clean_dest()
+
         for context in site.tree:
             name = context.source_path.name
             context.validate_only = dry_run

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Final, List, Optional, Union
+from typing import Final, List, Union, TypeAlias
 from collections.abc import Generator
 from .context import BuildContext, FileType
 
@@ -13,51 +13,62 @@ TEMPLATE_DIR: Final[Path] = Path("templates")
 URL_BASE: Final[str] = "/"
 URL_INDEX: Final[str] = "index.html"
 
-TreeItem: Final[Union] = Union["TreeNode", BuildContext]
+TreeItem: TypeAlias = Union["TreeNode", BuildContext]
 
 class TreeNode:
     path: Final[Path]
     parent: Final[TreeNode | None]
-    pages: List[BuildContext]
-    dirs: List[TreeNode]
+    pages: list[BuildContext]
+    sub_dirs: list[TreeNode]
 
-    def __init__(self, path: Path, parent: Optional[TreeNode] = None):
+    def __init__(self, path: Path, parent: TreeNode | None = None):
         self.path = path
         self.parent = parent
         self.pages = []
-        self.dirs = []
+        self.sub_dirs = []
 
     def __iter__(self) -> Generator[BuildContext, None, None]:
         yield from self.pages
-        for sub_dir in self.dirs:
-            yield from sub_dir
+        for s_d in self.sub_dirs:
+            yield from s_d
+
+    def __len__(self) -> int:
+        return sum(1 for _ in self)
+
+    def __contains__(self, item: TreeItem) -> bool:
+        if isinstance(item, BuildContext):
+            return any(i for i in self)
+
+        if isinstance(item, TreeNode):
+            return any(i for i in self.walk())
+
+        return False
 
     def __getitem__(self, path: Path) -> TreeItem:
-        for sub_dir in self.yield_dirs():
-            if sub_dir.path == path:
-                return sub_dir
+        if self.path == path:
+            return self
 
-        for page in self.yield_pages():
+        for page in self:
             if page.source_path == path:
                 return page
 
+        for s_d in self.walk():
+            if s_d.path == path:
+                return s_d
+
         raise KeyError(
-            f"Directory or file {path.name} not in {self.path} or a subdirectory"
+            f"Directory or file {path} not in {self.path} or any subdirectory"
         )
 
-    def yield_dirs(self) -> Generator[TreeNode, None, None]:
-        yield from self.dirs
-        for sub_dir in self.dirs:
-            yield from sub_dir.yield_dirs()
-
-    def yield_pages(self) -> Generator[BuildContext, None, None]:
-        yield from self.pages
-        for sub_dir in self.dirs:
-            yield from sub_dir.yield_pages()
+    def walk(self) -> Generator[TreeNode, None, None]:
+        yield from self.sub_dirs
+        for s_d in self.sub_dirs:
+            yield from s_d.walk()
 
 
 class TreeBuilder:
     site: Final[SiteRoot]
+    valid_ext: Final[frozenset[str]] = FileType.all()
     node: TreeNode
     node_path: Path
     node_dir_list: List[str]
@@ -68,7 +79,6 @@ class TreeBuilder:
         self.site = site
         self.node = site.tree
 
-    def build(self) -> None:
         for curr_dir, dir_list, file_list in self.site.source_dir.walk():
             self.node_path = curr_dir
             self.node_dir_list = dir_list
@@ -85,7 +95,7 @@ class TreeBuilder:
     def create_directory_nodes(self):
         for sub_dir in self.node_dir_list:
             node_path = Path(self.node_path, sub_dir)
-            self.node.dirs.append(
+            self.node.sub_dirs.append(
                 TreeNode(node_path, parent=self.node)
             )
 
@@ -97,7 +107,7 @@ class TreeBuilder:
 
             dest = file_path.with_suffix(".html")
 
-            if not (file_path.suffix.lower() in self.site.valid_ext):
+            if not (file_path.suffix.lower() in self.valid_ext):
                 continue
 
             context = BuildContext(
@@ -115,7 +125,6 @@ class SiteRoot:
     """
     root: Final[Path]
     tree: TreeNode
-    valid_ext: Final[frozenset[str]] = FileType.all()
     source_dir: Final[Path]
     dest_dir: Final[Path]
     template_dir: Final[Path]
