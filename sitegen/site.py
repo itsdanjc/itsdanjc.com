@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Final, List, Union, TypeAlias, Any, Type
 from collections.abc import Generator, Callable
 from jinja2 import Environment, FileSystemLoader, Template
-from .context import FileType, BuildContext
+from .context import FileType, BuildContext, Metrics
 from .templates import RSS_FALLBACK, SITEMAP_FALLBACK
 from .build import MarkdownPage, DEFAULT_EXTENSIONS
 from .exec import FileTypeError
@@ -122,23 +122,25 @@ class TreeBuilder:
     node_dir_list: List[str]
     node_file_list: List[str]
     node_not_root: bool
+    metrics: Metrics
 
     def __init__(self, site: SiteRoot):
         self.site = site
         self.node = site.tree
 
-        for curr_dir, dir_list, file_list in os.walk(self.site.source_dir):
-            self.node_path = Path(curr_dir)
-            self.node_dir_list = dir_list
-            self.node_file_list = file_list
+        with Metrics() as self.metrics:
+            for curr_dir, dir_list, file_list in os.walk(self.site.source_dir):
+                self.node_path = Path(curr_dir)
+                self.node_dir_list = dir_list
+                self.node_file_list = file_list
 
-            self.node_not_root = (curr_dir != self.site.tree.path)
+                self.node_not_root = (curr_dir != self.site.tree.path)
 
-            if self.node_not_root:
-                self.node = self.site.tree[self.node_path]
+                if self.node_not_root:
+                    self.node = self.site.tree[self.node_path]
 
-            self.create_directory_nodes()
-            self.create_file_nodes()
+                self.create_directory_nodes()
+                self.create_file_nodes()
 
     def create_directory_nodes(self):
         for sub_dir in self.node_dir_list:

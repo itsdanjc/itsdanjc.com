@@ -75,8 +75,8 @@ def build(
     logger.info("Building site at %s", site.root)
 
     with BuildStats() as build_stats:
-        logger.info("Indexing source directory.")
-        TreeBuilder(site)
+        builder = TreeBuilder(site)
+        logger.info("Indexed site in %.2fs.", builder.metrics["total_time"])
 
         if perform_clean:
             logger.info("Performing cleanup.")
