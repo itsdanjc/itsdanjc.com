@@ -165,9 +165,9 @@ class TreeBuilder:
                 env=self.site.env
             )
 
-            page_node = PageNode.create(context)
-            page_node.parse()
-            self.node.pages.append(page_node)
+            self.node.pages.append(
+                PageNode.create(context)
+            )
 
 
 class SiteRoot:
@@ -214,10 +214,10 @@ class SiteRoot:
 
         tree = []
         now: datetime = datetime.now(timezone.utc)
-        for context in self.tree.sort(SortKey.LAST_MODIFIED):
-            page = Page(context, DEFAULT_EXTENSIONS)
+        for itm in self.tree.sort(SortKey.LAST_MODIFIED):
+            page = PageNode.create(itm.context)
             page.parse()
-            tree.append(page.get_template_context())
+            # tree.append(page.get_template_context())
 
         return rss_template.render(site=self, tree=tree, now=now)
 
@@ -228,9 +228,9 @@ class SiteRoot:
 
         tree = []
         now: datetime = datetime.now(timezone.utc)
-        for context in self.tree.sort(SortKey.LAST_MODIFIED):
-            page = Page(context, DEFAULT_EXTENSIONS)
+        for itm in self.tree.sort(SortKey.LAST_MODIFIED):
+            page = PageNode.create(itm.context)
             page.parse()
-            tree.append(page.get_template_context())
+            # tree.append(page.get_template_context())
 
         return sitemap_template.render(site=self, tree=tree, now=now)

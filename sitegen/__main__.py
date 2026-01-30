@@ -84,7 +84,8 @@ def build(
             site.clean_dest()
 
         for page in site.tree:
-                print(page.context.source_path)
+            page.parse()
+            print(page.context.source_path)
         #     name = context.source_path.name
         #     context.validate_only = dry_run
         #
