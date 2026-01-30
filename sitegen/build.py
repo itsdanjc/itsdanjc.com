@@ -31,16 +31,21 @@ class Page(ABC):
     title: PageTitle
     body: PageBody
     template: Template
-    context: BuildContext
+    build_context: BuildContext
+    template_context: TemplateContext
     type: FileType
     metadata: dict[str, Any]
     jinja_env: Environment
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, context: BuildContext, jinja_env: Environment) -> None:
+        self.build_context = context
+        self.jinja_env = jinja_env
 
     @abstractmethod
     def parse(self) -> None:
+        pass
+
+    def render(self) -> TemplateContext:
         pass
 
     def read(self) -> str:
@@ -50,7 +55,7 @@ class Page(ABC):
         :raise FileTypeError: Tried to open a non markdown file.
         :raise IOError: If source file cannot be opened for any reason.
         """
-        path = self.context.source_path
+        path = self.build_context.source_path
         if not (path.suffix.lower() in self.type.value):
             raise FileTypeError("File not a markdown file.", path.suffix)
 
@@ -62,27 +67,36 @@ class Page(ABC):
         except OSError as e:
             raise IOError(*e.args) from e
 
-    def write(self, page_body: str) -> int:
+    def write(self) -> int:
         """
         Prepare destination file for writing.
         :return: File object as the built-in `open()` function does.
         :raise IOError: If source file cannot be opened for any reason.
         """
-        path = self.context.dest_path
+        path = self.build_context.dest_path
+        if self.build_context.validate_only:
+            return 0
+
+        if not hasattr(self, "template_context"):
+            raise RuntimeError("No template_context defined. Have you called `render()`?")
 
         try:
+            content = self.template.render(
+                page=self.template_context,
+            )
+
             path.parent.mkdir(parents=True, exist_ok=True)
-            return path.write_text(page_body, errors="ignore", encoding="utf-8")
+            return path.write_text(content, errors="ignore", encoding="utf-8")
 
         except OSError as e:
             raise IOError(*e.args) from e
 
-class MarkdownPage(Page, Markdown):
-    def __init__(self, context: BuildContext):
-        super(Page).__init__()
+
+class MarkdownPage(Page):
+    type = FileType.MARKDOWN
+    def __init__(self, context: BuildContext, jinja_env: Environment) -> None:
+        super().__init__(context, jinja_env)
         self.__marko = Markdown(extensions=DEFAULT_EXTENSIONS)
-        self.context = context
-        self.type = FileType.MARKDOWN
 
     def parse(self) -> None:
         """
@@ -96,11 +110,15 @@ class MarkdownPage(Page, Markdown):
         )
 
         if len(self.body.children) == 0:
-            default_heading = self.context.dest_path.stem
+            default_heading = self.build_context.dest_path.stem
             default_body = PAGE_DEFAULT.format(heading=default_heading, body=PAGE_DEFAULT_BODY)
             self.body = self.__marko.parse(default_body)
 
         self.__extract_title()
+        self.metadata = {}
+        self.template = self.jinja_env.get_or_select_template(
+            ["page.html", PAGE_FALLBACK]
+        )
 
     def __extract_title(self) -> None:
         # Set a default before attempting to get actual title
@@ -119,82 +137,26 @@ class MarkdownPage(Page, Markdown):
             self.__marko.renderer.render_children(title)
         )
 
-#    def get_template_context(self) -> TemplateContext:
-#        t_c = TemplateContext()
-#        with Metrics() as metrics:
-#            t_c.modified = self.context.source_path_lastmod
-#            t_c.yml = self.metadata
-#            t_c.url = self.context.url_path
-#            t_c.now = datetime.now(timezone.utc)
-#
-#            t_c.html = Markup(
-#                super().render(self.body)
-#            )
-#
-#            t_c.table_of_contents = Markup(
-#                self.renderer.render_toc()
-#            )
-#
-#            t_c.title = Markup(
-#                self.renderer.render_children(self.title)
-#            )
-#
-#        t_c.metrics = metrics
-#        return t_c
-#
-#    def render(self, *templates: str | Template, **jinja_context) -> None:
-#        """
-#        Render this page object to HTML and write it to disk.
-#
-#        Uses the template `page.html` located in `_fragments` else,
-#        will fallback to use `DEFAULT_PAGE_TEMPLATE`. Renders the page
-#        using the current object as context.
-#
-#        :param templates:
-#        :param jinja_context: Additional context when rendering.
-#        :return: None
-#        """
-#        self.set_template(*templates, "page.html")
-#        template_context = self.get_template_context()
-#
-#        template_context.metrics["template"] = self.template.name
-#        with self.w_open() as f:
-#            html = self.template.render(
-#                page=template_context, **jinja_context
-#            )
-#
-#            if not self.context.validate_only:
-#                f.write(html)
-#
-#def build(
-#        build_context: BuildContext,
-#        extensions: Iterable[str | MarkoExtension] | None = None,
-#        **jinja_context: Any
-#) -> None:
-#    """
-#    Build a page from a Markdown document.
-#
-#    If no extensions are provided, the default extension list will be used.
-#
-#    :param build_context: BuildContext instance.
-#    :param extensions: Optional iterable of Marko extension names or
-#            extension instances to enable for Markdown parsing.
-#    :param jinja_context: Additional context when rendering.
-#    :return: None
-#    """
-#    if not extensions:
-#        extensions = DEFAULT_EXTENSIONS
-#
-#    if build_context.type != FileType.MARKDOWN:
-#        print(build_context.type)
-#        logger.warning("%s is not a Markdown or HTML file.", build_context.source_path.name)
-#        return
-#
-#    page = Page(build_context, extensions)
-#    page.parse(PAGE_DEFAULT_BODY)
-#
-#    if page.metadata.get("is_draft", False):
-#        logger.info("Page %s is draft. Skipping...", build_context.source_path)
-#        return
-#
-#    page.render(**jinja_context)
+    def render(self) -> None:
+        if getattr(self, "template_context", None):
+            return
+
+        t_c = TemplateContext()
+        with Metrics() as metrics:
+            metrics["template"] = self.template.name
+            t_c.modified = self.build_context.source_path_lastmod
+            t_c.yml = self.metadata
+            t_c.url = self.build_context.url_path
+            t_c.now = datetime.now(timezone.utc)
+            t_c.title = self.title
+
+            t_c.html = Markup(
+                self.__marko.render(self.body)
+            )
+
+            t_c.table_of_contents = Markup(
+                self.__marko.renderer.render_toc()
+            )
+
+        t_c.metrics = metrics
+        self.template_context = t_c

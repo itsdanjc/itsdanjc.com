@@ -78,49 +78,38 @@ def build(
         logger.info("Indexing source directory.")
         TreeBuilder(site)
 
-
         if perform_clean:
             logger.info("Performing cleanup.")
             site.clean_dest()
 
         for page in site.tree:
+            name = page.build_context.source_path.name
+            page.build_context.validate_only = dry_run
+
             page.parse()
-            print(page.context.source_path)
-        #     name = context.source_path.name
-        #     context.validate_only = dry_run
-        #
-        #     modified = (context.is_modified or force or dry_run)
-        #     if not modified:
-        #         logger.debug("Found unmodified %s", name)
-        #         continue
-        #
-        #     logger.info("Building page %s", name)
-        #
-        #     try:
-        #         build_page(context)
-        #     except (OSError, TemplateError, FileExistsError) as e:
-        #         build_stats.errors += 1
-        #         logger.exception("Failed to build", exc_info=e)
-        #         continue
-        #
-        #     logger.info("Build OK")
-        #     build_stats.add_stat(context.build_reason)
-        #
-        # if not (no_rss or dry_run):
-        #     rss = site.make_rss()
-        #     rss_path = site.dest_dir.joinpath("feed.xml")
-        #
-        #     rss_path.parent.mkdir(exist_ok=True)
-        #     with rss_path.open("w") as out:
-        #         out.write(rss)
-        #
-        # if not (no_sitemap or dry_run):
-        #     sitemap = site.make_sitemap()
-        #     sitemap_path = site.dest_dir.joinpath("sitemap.xml")
-        #
-        #     sitemap_path.parent.mkdir(exist_ok=True)
-        #     with sitemap_path.open("w") as out:
-        #         out.write(sitemap)
+            if not (page.build_context.is_modified or force or dry_run):
+                logger.debug("Found unmodified %s", name)
+                continue
+
+            logger.info("Building page %s", name)
+
+            try:
+                page.render()
+                page.write()
+                build_stats.add_stat(page.build_context.build_reason)
+
+            except (OSError, TemplateError, FileExistsError) as e:
+                build_stats.errors += 1
+                logger.exception("Failed to build", exc_info=e)
+                continue
+
+        if not (no_rss or dry_run):
+            rss_path = site.dest_dir.joinpath("feed.xml")
+            site.make_rss(rss_path)
+
+        if not (no_sitemap or dry_run):
+            sitemap_path = site.dest_dir.joinpath("sitemap.xml")
+            site.make_sitemap(sitemap_path)
 
     logger.info(build_stats.summary())
 

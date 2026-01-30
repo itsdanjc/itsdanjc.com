@@ -6,7 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Final, List, Union, TypeAlias, Any, Type
 from collections.abc import Generator, Callable
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Template
 from .context import FileType, BuildContext
 from .templates import RSS_FALLBACK, SITEMAP_FALLBACK
 from .build import MarkdownPage, DEFAULT_EXTENSIONS
@@ -26,11 +26,11 @@ TreeItem: TypeAlias = Union["TreeNode", Page]
 
 class SortKey(Enum):
     """Sort key methods. For TreeNode.sort()"""
-    BUILD_REASON = lambda page: page.context.build_reason
-    FILE_TYPE = lambda page: page.context.type
-    PATH = lambda page: page.context.url_path
-    LAST_MODIFIED = lambda page: page.context.source_path_lastmod
-    LAST_BUILD_DATE = lambda page: page.context.dest_path_lastmod
+    BUILD_REASON = lambda page: page.build_context.build_reason
+    FILE_TYPE = lambda page: page.build_context.type
+    PATH = lambda page: page.build_context.url_path
+    LAST_MODIFIED = lambda page: page.build_context.source_path_lastmod
+    LAST_BUILD_DATE = lambda page: page.build_context.dest_path_lastmod
 
 
 class TreeNode:
@@ -67,7 +67,7 @@ class TreeNode:
             return self
 
         for page in self:
-            if page.context.source_path == path:
+            if page.build_context.source_path == path:
                 return page
 
         for s_d in self.walk():
@@ -96,7 +96,7 @@ class TreeNode:
 class PageNode:
     _registry: dict[FileType, Type[Page]] = {
         FileType.MARKDOWN: MarkdownPage,
-        # FileType.HTML: HtmlPage,
+        # FileType.HTML: HtmlPage,au
         # FileType.YAML: YamlPage,
     }
 
@@ -105,13 +105,13 @@ class PageNode:
         cls._registry[file_type] = page_cls
 
     @classmethod
-    def create(cls, context: BuildContext) -> Page:
+    def create(cls, context: BuildContext, jinja_env: Environment) -> Page:
         try:
             page_cls = cls._registry[context.type]
         except KeyError:
             raise FileTypeError("Invalid file type", "")
 
-        return page_cls(context)
+        return page_cls(context, jinja_env)
 
 
 class TreeBuilder:
@@ -166,7 +166,7 @@ class TreeBuilder:
             )
 
             self.node.pages.append(
-                PageNode.create(context)
+                PageNode.create(context, self.site.env)
             )
 
 
@@ -207,30 +207,30 @@ class SiteRoot:
 
         return total_removed
 
-    def make_rss(self) -> str:
+    def render_index(self, template: Template) -> str:
+        tree = []
+        for node in self.tree.sort(SortKey.LAST_MODIFIED):
+            node.render()
+            tree.append(node.template_context)
+
+        return template.render(
+            site=self,
+            tree=tree,
+            now=datetime.now(tz=timezone.utc)
+        )
+
+    def make_rss(self, out: Path) -> None:
         rss_template = self.env.get_or_select_template(
             ["feed.xml", RSS_FALLBACK]
         )
 
-        tree = []
-        now: datetime = datetime.now(timezone.utc)
-        for itm in self.tree.sort(SortKey.LAST_MODIFIED):
-            page = PageNode.create(itm.context)
-            page.parse()
-            # tree.append(page.get_template_context())
+        rss_feed = self.render_index(rss_template)
+        out.write_text(rss_feed)
 
-        return rss_template.render(site=self, tree=tree, now=now)
-
-    def make_sitemap(self) -> str:
+    def make_sitemap(self, out: Path) -> None:
         sitemap_template = self.env.get_or_select_template(
             ["sitemap.xml", SITEMAP_FALLBACK]
         )
 
-        tree = []
-        now: datetime = datetime.now(timezone.utc)
-        for itm in self.tree.sort(SortKey.LAST_MODIFIED):
-            page = PageNode.create(itm.context)
-            page.parse()
-            # tree.append(page.get_template_context())
-
-        return sitemap_template.render(site=self, tree=tree, now=now)
+        sitemap = self.render_index(sitemap_template)
+        out.write_text(sitemap)
