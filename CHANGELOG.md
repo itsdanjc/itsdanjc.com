@@ -5,6 +5,7 @@
 
 ## Fixes
 - When creating rss and sitemap, it no longer needs to rerender all pages again.
+- Exits gracefully when the is no source directory.
 
 ## Added
 - Caching file index, gives huge performance boost for large sites.

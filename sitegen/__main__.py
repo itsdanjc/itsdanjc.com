@@ -49,9 +49,10 @@ def main(argv: Optional[list[str]] = None) -> None:
     args = parser.parse_args(argv)
     print(CLI_HEADER_MSG, end="\n\n")
     configure_logging(args.verbose)
+    result: int = 0
     try:
         if args.commands == "build":
-            build(
+            result = build(
                 args.force,
                 args.site_root,
                 args.clean,
@@ -62,6 +63,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     except KeyboardInterrupt:
         sys.exit(0)
 
+    sys.exit(result)
 
 
 def build(
@@ -71,10 +73,14 @@ def build(
         dry_run: bool,
         no_rss: bool,
         no_sitemap: bool
-) -> None:
+) -> int:
     site = SiteRoot(directory.resolve())
-    logger.info("Building site at %s", site.root)
 
+    if not site.source_dir.exists():
+        logger.error("No site at %s", site.root)
+        return 1
+
+    logger.info("Building site at %s", site.root)
     index_cache_duration = (
         timedelta(seconds=0) if perform_clean or dry_run
         else timedelta(minutes=2.5)
@@ -119,6 +125,7 @@ def build(
             site.make_sitemap(sitemap_path)
 
     logger.info(build_stats.summary())
+    return 0
 
 if __name__ == "__main__":
     main()
