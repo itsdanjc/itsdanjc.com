@@ -133,7 +133,7 @@ class TreeBuilder:
     # should be changed.
     cache_version = 1
 
-    def __init__(self, site: SiteRoot, cache_delta: timedelta):
+    def __init__(self, site: SiteRoot, cache_delta: Optional[timedelta] = None):
         """
         Perform an index of the source files.
 
@@ -222,7 +222,7 @@ class TreeBuilder:
         )
 
         try:
-            expired = (datetime.now() - cache_last_mod) > delta
+            expired = (datetime.now() - cache_last_mod) > delta if delta else False
             if expired:
                 logger.debug("Cache expired, will reindex")
                 return None
