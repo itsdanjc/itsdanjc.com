@@ -9,6 +9,7 @@
 
 ## Added
 - Caching file index, gives huge performance boost for large sites.
+  - Cache file is also gzip compressed.
 
 ## 0.2.0
 ### Added

@@ -4,6 +4,7 @@ import os
 import pickle
 import tempfile
 import hashlib
+import gzip
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from pathlib import Path
@@ -256,7 +257,7 @@ class TreeBuilder:
 
         # Write dump to temp location
         with tempfile.NamedTemporaryFile("wb", delete=False, dir=cache_dir) as fout:
-            fout.write(dump)
+            fout.write( gzip.compress(dump) )
             temp_pickle = fout.name
 
         # Write hash to temp location
@@ -285,7 +286,9 @@ class TreeBuilder:
             raise FileNotFoundError("Cache file not found")
 
         try:
-            read = self.cache_file.read_bytes()
+            read = gzip.decompress(
+                self.cache_file.read_bytes()
+            )
             tree_hash = hashlib.sha256(read).hexdigest()
             data = pickle.loads(read)
 
